@@ -3,102 +3,172 @@ import numpy as np
 import scipy.io.wavfile as wav
 import speech_recognition as sr
 import random
-from googletrans import Translator
-from collections import defaultdict
+import os
+from time import sleep
 
-def self():
-    recognizer = sr.Recognizer()
-    with sr.AudioFile("output.wav") as source:
-        self.words = {
-        "easy": ["кот", "собака", "яблоко", "молоко", "солнце"],
-        "medium": ["банан", "школа", "друг", "окно", "жёлтый"],
-        "hard": ["технология", "университет", "информация", "произношение", "воображение"]}
-        self.scores = defaultdict(int)
-        self.current_level = 'easy'
-        self.lives = 3
-        self.recognizer = sr.Recognizer()
-         
-    
-    def select_level(self):
-        self.speak("\nВыберите уровень сложности:")
-        self.speak("1 - Легкий")
-        self.speak("2 - Средний")
-        self.speak("3 - Сложный")
-        
-        
-        choice = self.listen()
-        if '1' in choice or 'легк' in choice:
-            self.current_level = 'easy'
-        elif '2' in choice or 'средн' in choice:
-            self.current_level = 'medium'
-        elif '3' in choice or 'сложн' in choice:
-            self.current_level = 'hard'
-        else:
-            self.speak("Неверный ввод, попробуйте снова.")
-        return True
-    duration = 5  # секунды записи
-    sample_rate = 44100
+# Настройки аудио
+duration = 5  # секунды записи
+sample_rate = 44100
 
-    print("Говори...")
-    recording = sd.rec(
-    int(duration * sample_rate), # длительность записи в сэмплах
-    samplerate=sample_rate,      # частота дискретизации
-    channels=1,                  # 1 — это моно
-    dtype="int16")               # формат аудиоданных
-    sd.wait()  # ждём завершения записи
-
-wav.write("output.wav", sample_rate, recording)
-print("Запись завершена, теперь распознаём...")
-
+# Инициализация
 recognizer = sr.Recognizer()
-with sr.AudioFile("output.wav") as source:
-    audio = recognizer.record(source)
+score = 0
+mistakes = 0
+max_mistakes = 3
+highscore_file = "highscore.txt"
 
-    def play_round(self):
-        if not self.words[self.current_level]:
-            self.speak("В этом уровне больше нет слов для изучения!")
-            return True
-        
-        word, translation = random.choice(list(self.words[self.current_level].items()))
-        
-        self.speak(f"\nПереведите слово: {word}")
-        self.speak("Повторите слово после сигнала")
-        
-        user_translation = self.listen()
-        
-        if user_translation and translation.lower() in user_translation:
-            self.speak("Правильно! 👍")
-            self.scores[self.current_level] += 1
-            del self.words[self.current_level][word]
+# Словарь слов по уровням сложности (русский: английский)
+words = {
+    "easy": {
+        "яблоко": "apple",
+        "кот": "cat",
+        "собака": "dog",
+        "дом": "house",
+        "книга": "book",
+        "солнце": "sun",
+        "вода": "water"
+    },
+    "medium": {
+        "огонь": "fire",
+        "дерево": "tree",
+        "город": "city",
+        "работа": "work",
+        "школа": "school",
+        "учеба": "study",
+        "деньги": "money"
+    },
+     "hard": {
+        "достопримечательность": "attraction",
+        "эксперимент": "experiment",
+        "исследование": "research",
+        "технология": "technology",
+        "государство": "state",
+        "окружающая среда": "environment",
+        "взаимодействие": "interaction"
+    }
+}
+
+def record_audio():
+    """Запись аудио с микрофона"""
+    print("Говорите сейчас...")
+    audio = sd.rec(int(duration * sample_rate), samplerate=sample_rate, channels=1, dtype='int16')
+    sd.wait()
+    return audio
+def save_and_recognize(audio):
+    """Сохраняет аудио и распознает речь"""
+    temp_file = "temp.wav"
+    wav.write(temp_file, sample_rate, audio)
+    
+    with sr.AudioFile(temp_file) as source:
+        audio_data = recognizer.record(source)
+        try:
+            text = recognizer.recognize_google(audio_data, language='en-US')
+            print(f"Вы сказали: {text}")
+            return text.lower()
+        except sr.UnknownValueError:
+            print("Речь не распознана")
+            return None
+        finally:
+            if os.path.exists(temp_file):
+                os.remove(temp_file)
+
+def load_highscore():
+    """Загружает рекорд из файла"""
+    if os.path.exists(highscore_file):
+        with open(highscore_file, 'r') as f:
+            try:
+                return int(f.read())
+            except:
+                return 0
+    return 0
+
+def save_highscore(new_score):
+    """Сохраняет новый рекорд"""
+    with open(highscore_file, 'w') as f:
+        f.write(str(new_score))
+
+def select_level():
+    """Выбор уровня сложности"""
+    print("\nВыберите уровень сложности:")
+    print("1 - Легкий (Easy)")
+    print("2 - Средний (Medium)")
+    print("3 - Сложный (Hard)")
+    
+    while True:
+        choice = input("Ваш выбор (1-3): ")
+        if choice == '1':
+            return 'easy'
+        elif choice == '2':
+            return 'medium'
+        elif choice == '3':
+            return 'hard'
         else:
-            self.speak(f"Неверно. Правильный перевод: '{translation}'")
-            self.lives -= 1
-            self.speak(f"У вас осталось {self.lives} жизней")
-        
-        return self.lives > 0
+            print("Неверный ввод, попробуйте снова")
+
+def play_game(level):
+    global score, mistakes
     
-    def show_stats(self):
-        self.speak("\nВаши результаты:")
-        for level, score in self.scores.items():
-            self.speak(f"{level.capitalize()}: {score} правильных ответов")
+    level_words = words[level]
+    if not level_words:
+        print("В этом уровне нет доступных слов!")
+        return False
+
+    # Выбираем случайное слово из выбранного уровня
+    russian_word, correct_translation = random.choice(list(level_words.items()))
     
-    def run(self):
-        self.speak("Добро пожаловать в голосовую игру для изучения языков!")
-        self.speak("Попробуйте перевести слова с английского на русский.")
-        self.speak("У вас есть 3 жизни. После 3 ошибок игра закончится.")
+    print(f"\nПереведите слово: '{russian_word}'")
+    print("Запись через 1 секунду...")
+    sleep(1)
+    
+    # Записываем и распознаем ответ
+    audio = record_audio()
+    user_answer = save_and_recognize(audio)
+    
+    if user_answer is None:
+        print("Попробуйте еще раз")
+        return True
+    
+    # Проверяем ответ
+    if user_answer == correct_translation:
+        print("Правильно! 👍")
+        score += 1
+    else:
+        print(f"Неверно. Правильный ответ: '{correct_translation}'")
+        mistakes += 1
+        print(f"Ошибок: {mistakes}/{max_mistakes}")
+    
+    print(f"Счет: {score}")
+    return mistakes < max_mistakes
+
+if __name__ == "__main__":
+    print("Добро пожаловать в игру 'Переводчик'!")
+    print(f"У вас есть {max_mistakes} попытки. После {max_mistakes} ошибок игра закончится.")
+    
+    highscore = load_highscore()
+    print(f"Текущий рекорд: {highscore}")
+    
+    while True:
+        level = select_level()
+        print(f"\nВыбран уровень: {level.capitalize()}")
         
-        while True:
-            if not self.select_level():
-                break
-            
-            self.speak(f"\nУровень: {self.current_level.capitalize()}")
-            if not self.play_round():
-                self.speak("\nИгра окончена! Вы исчерпали все жизни.")
-                break
-            
-            cont = self.listen()
-            if 'нет' in cont or 'хватит' in cont or 'стоп' in cont:
-                break
+        # Сброс счетчиков для новой игры
+        score = 0
+        mistakes = 0
+
+        while play_game(level):
+            continue
         
-        self.show_stats()
-        self.speak("Спасибо за игру! До свидания!")
+        # Конец игры
+        print("\nИгра окончена!")
+        print(f"Ваш результат: {score}")
+        
+        if score > highscore:
+            print("Новый рекорд! 🎉")
+            save_highscore(score)
+            highscore = score
+        
+        play_again = input("\nХотите сыграть еще раз? (да/нет): ").lower()
+        if play_again != 'да':
+            break
+    
+    print("Спасибо за игру! До свидания!")
